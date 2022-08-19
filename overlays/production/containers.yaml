@@ -1,0 +1,18 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fastapi
+spec:
+  selector:
+    matchLabels:
+      app: fastapi
+  template:
+    spec:
+      containers:
+        - name: fastapi
+          image: anthonycorletti/krm-template-python-app:v0.0.1
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "200m"

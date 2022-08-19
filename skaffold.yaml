@@ -1,0 +1,19 @@
+apiVersion: skaffold/v2beta29
+kind: Config
+metadata:
+  name: krm_template_python
+build:
+  artifacts:
+    - image: anthonycorletti/krm-template-python-app
+      docker:
+        dockerfile: Dockerfile
+deploy:
+  kustomize:
+    paths:
+      - overlays/development
+profiles:
+  - name: prod
+    deploy:
+      kustomize:
+        paths:
+          - overlays/production

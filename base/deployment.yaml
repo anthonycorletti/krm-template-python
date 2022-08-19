@@ -1,0 +1,23 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fastapi
+spec:
+  selector:
+    matchLabels:
+      app: fastapi
+  template:
+    metadata:
+      labels:
+        app: fastapi
+    spec:
+      containers:
+        - name: fastapi
+          image: anthonycorletti/krm-template-python-app:latest
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+          ports:
+            - containerPort: 8000

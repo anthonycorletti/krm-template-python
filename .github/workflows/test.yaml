@@ -1,0 +1,79 @@
+name: test
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [opened, synchronize]
+
+env:
+  GKE_CLUSTER_NAME: autopilot-cluster-1 # TODO: replace with your cluster name
+  GKE_REGION: us-central1 # TODO: replace with your cluster region
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9"]
+      fail-fast: false
+
+    permissions:
+      contents: "read"
+      id-token: "write"
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: update and install packages
+        run: |
+          sudo apt-get update -y \
+          && sudo apt-get install -y curl \
+          && curl -Lo skaffold https://storage.googleapis.com/skaffold/releases/latest/skaffold-linux-amd64 \
+          && sudo install skaffold /usr/local/bin/ \
+          && curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash \
+          && skaffold config set --global collect-metrics false
+
+      - name: set up python
+        uses: actions/setup-python@v1
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: install dependencies
+        run: ./scripts/install.sh
+
+      - name: run tests
+        run: ./scripts/test.sh
+
+      - name: skaffold build container
+        if: github.event_name == 'pull_request'
+        run: skaffold build --push=false --cache-artifacts=false
+
+      - id: gcp_auth
+        name: authenticate to gcp
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: "google-github-actions/auth@v0.4.0"
+        with:
+          workload_identity_provider: "projects/${{ secrets.GCP_PROJECT_ID_DEV }}/locations/global/workloadIdentityPools/github/providers/github"
+          service_account: "${{ secrets.GCP_SA_DEV }}"
+
+      - name: Set up docker to communicate via gcloud cli
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          gcloud auth login --brief --cred-file="${{ steps.gcp_auth.outputs.credentials_file_path }}"
+          gcloud auth configure-docker
+
+      - name: skaffold build and push latest
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          skaffold build --cache-artifacts=false --tag=latest --file-output=skaffold.out
+
+      - name: skaffold deploy
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          gcloud container clusters get-credentials $GKE_CLUSTER_NAME --region $GKE_REGION
+          skaffold deploy --build-artifacts=skaffold.out
